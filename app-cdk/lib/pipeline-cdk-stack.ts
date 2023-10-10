@@ -7,10 +7,13 @@ import * as codepipeline_actions from "aws-cdk-lib/aws-codepipeline-actions";
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as iam from "aws-cdk-lib/aws-iam";
+import * as ecsPatterns from "aws-cdk-lib/aws-ecs-patterns";
 
 interface ConsumerProps extends StackProps {
   ecrRepository: ecr.Repository;
+  testAppFargateService: ecsPatterns.ApplicationLoadBalancedFargateService;
 }
+
 
 export class PipelineCdkStack extends Stack {
   constructor(scope: Construct, id: string, props: ConsumerProps) {
@@ -41,6 +44,7 @@ export class PipelineCdkStack extends Stack {
           privileged: true,
           computeType: codebuild.ComputeType.LARGE
         },
+        buildSpec: codebuild.BuildSpec.fromSourceFilename("buildspec_test.yml"),
       }
     );
 
@@ -128,6 +132,17 @@ export class PipelineCdkStack extends Stack {
         }),
       ],
     });
+
+    pipeline.addStage({
+      stageName: 'Deploy-Test',
+      actions: [
+        new codepipeline_actions.EcsDeployAction({
+          actionName: 'deployECS',
+          service: props.testAppFargateService.service,
+          input: dockerBuildOutput
+        }),
+      ]
+    });   
 
     new CfnOutput(this, "CodeCommitRepositoryUrl", {
       value: sourceRepo.repositoryCloneUrlHttp,
