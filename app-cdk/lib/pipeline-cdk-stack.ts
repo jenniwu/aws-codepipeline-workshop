@@ -12,8 +12,8 @@ import * as ecsPatterns from "aws-cdk-lib/aws-ecs-patterns";
 interface ConsumerProps extends StackProps {
   ecrRepository: ecr.Repository;
   testAppFargateService: ecsPatterns.ApplicationLoadBalancedFargateService;
+  prodAppFargateService: ecsPatterns.ApplicationLoadBalancedFargateService;
 }
-
 
 export class PipelineCdkStack extends Stack {
   constructor(scope: Construct, id: string, props: ConsumerProps) {
@@ -109,17 +109,17 @@ export class PipelineCdkStack extends Stack {
       ],
     });
 
-    // pipeline.addStage({
-    //   stageName: "Code-Quality-Testing",
-    //   actions: [
-    //     new codepipeline_actions.CodeBuildAction({
-    //       actionName: "Unit-Test",
-    //       project: codeQualityBuild,
-    //       input: sourceOutput,
-    //       outputs: [unitTestOutput],
-    //     }),
-    //   ],
-    // });
+    pipeline.addStage({
+      stageName: "Code-Quality-Testing",
+      actions: [
+        new codepipeline_actions.CodeBuildAction({
+          actionName: "Unit-Test",
+          project: codeQualityBuild,
+          input: sourceOutput,
+          outputs: [unitTestOutput],
+        }),
+      ],
+    });
 
     pipeline.addStage({
       stageName: "Docker-Push-ECR",
@@ -142,7 +142,23 @@ export class PipelineCdkStack extends Stack {
           input: dockerBuildOutput
         }),
       ]
-    });   
+    });
+
+    pipeline.addStage({
+      stageName: 'Deploy-Production',
+      actions: [
+        new codepipeline_actions.ManualApprovalAction({
+          actionName: 'Approve-Prod-Deploy',
+          runOrder: 1
+        }),
+        new codepipeline_actions.EcsDeployAction({
+          actionName: 'deployECS',
+          service: props.prodAppFargateService.service,
+          input: dockerBuildOutput,
+          runOrder: 2
+        })
+      ]
+    });    
 
     new CfnOutput(this, "CodeCommitRepositoryUrl", {
       value: sourceRepo.repositoryCloneUrlHttp,
